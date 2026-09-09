@@ -1,9 +1,4 @@
-pyspark==3.5.4
+streamlit
 pandas
 numpy
-matplotlib
-seaborn
-scikit-learn
-shap
-streamlit
 plotly
