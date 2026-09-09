@@ -1,6 +1,3 @@
-# Dataset (tải từ Kaggle, không commit lên repo)
-Data/
-
 # Kết quả pipeline (tự generate khi chạy pipeline.py)
 Results/
 
