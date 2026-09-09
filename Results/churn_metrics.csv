@@ -1,3 +1,3 @@
 Model,AUC-ROC,Accuracy,F1-Score
-Logistic Regression,1.0,1.0,1.0
-Random Forest,0.9997,0.9928,0.9928
+Logistic Regression,0.5116,0.5721,0.467
+Random Forest,0.9636,0.918,0.9172

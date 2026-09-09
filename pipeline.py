@@ -258,7 +258,7 @@ churn_rate = churn_df.filter(F.col("churn") == 1).count() / churn_df.count()
 print(f"  Churn rate : {churn_rate:.1%}")
 
 feat_assembler = VectorAssembler(
-    inputCols=["Recency", "Frequency", "Monetary", "RFM_Score", "segment"],
+    inputCols=["Monetary", "M_score", "segment"],
     outputCol="features"
 )
 churn_df = feat_assembler.transform(churn_df)
@@ -289,7 +289,7 @@ metrics.to_csv(f"{RESULTS}/churn_metrics.csv", index=False)
 print(metrics.to_string(index=False))
 
 (rf_pred
- .select("customer_unique_id", "Recency", "Frequency", "Monetary", "churn", "prediction")
+ .select("customer_unique_id", "Recency", "Frequency", "Monetary", "M_score", "segment", "churn", "prediction")
  .toPandas()
  .to_csv(f"{RESULTS}/churn_predictions.csv", index=False))
 print("  STEP 4 done ✓\n")
@@ -396,7 +396,7 @@ try:
     from sklearn.ensemble import RandomForestClassifier as SKRf
 
     churn_pdf = pd.read_csv(f"{RESULTS}/churn_predictions.csv")
-    feature_cols = ["Recency", "Frequency", "Monetary"]
+    feature_cols = ["Monetary", "M_score", "segment"]
     X = churn_pdf[feature_cols]
     y = churn_pdf["churn"].astype(int)
 
