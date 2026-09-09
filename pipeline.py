@@ -1,8 +1,8 @@
-import os, time, warnings
+import os, time, warnings, shutil
 import pandas as pd
 import numpy as np
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 
 from pyspark.sql import SparkSession
@@ -10,7 +10,6 @@ from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 from pyspark.ml.feature import VectorAssembler, StandardScaler
 from pyspark.ml.clustering import KMeans
-from pyspark.ml.evaluation import ClusteringEvaluator
 from pyspark.ml.classification import LogisticRegression, RandomForestClassifier
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, MulticlassClassificationEvaluator
 
@@ -20,6 +19,12 @@ BASE    = r"C:\Users\ThanhT\OneDrive - Keyloop\Desktop\Thạc sĩ\Nghiên cứu 
 DATA    = os.path.join(BASE, "Data")
 RESULTS = os.path.join(BASE, "Results")
 os.makedirs(RESULTS, exist_ok=True)
+
+# Xóa thư mục parquet cũ do PySpark tạo (nếu có) để pandas ghi file bình thường
+for _p in ["master.parquet", "rfm.parquet", "segmented.parquet"]:
+    _full = os.path.join(RESULTS, _p)
+    if os.path.isdir(_full):
+        shutil.rmtree(_full)
 
 spark = (SparkSession.builder
          .appName("Olist_Analytics")
@@ -90,11 +95,12 @@ monthly = (master
            .orderBy("month")
            .toPandas())
 fig, ax = plt.subplots(figsize=(12, 4))
-ax.plot(monthly["month"], monthly["count"], marker="o", color="steelblue", linewidth=1.5)
+ax.plot(monthly["month"], monthly["count"], marker="o", color="steelblue", linewidth=1.5, label="Monthly Orders")
 ax.set_title("Monthly Orders Trend (Delivered)", fontsize=13)
 ax.set_xlabel("Month"); ax.set_ylabel("Orders")
+ax.legend()
 plt.xticks(rotation=45, ha="right"); plt.tight_layout()
-plt.savefig(f"{RESULTS}/eda_monthly_trend.png", dpi=150); plt.close()
+plt.savefig(f"{RESULTS}/eda_monthly_trend.png", dpi=150); plt.show(); plt.close()
 
 # Top 10 product categories (English)
 items_cat = (items
@@ -110,12 +116,13 @@ top_cat.to_csv(f"{RESULTS}/eda_top_categories.csv", index=False)
 
 fig, ax = plt.subplots(figsize=(10, 5))
 ax.barh(top_cat["product_category_name_english"][::-1],
-        top_cat["count"][::-1], color="steelblue")
+        top_cat["count"][::-1], color="steelblue", label="Item Count")
 ax.set_title("Top 10 Product Categories"); ax.set_xlabel("Number of Items")
+ax.legend()
 plt.tight_layout()
-plt.savefig(f"{RESULTS}/eda_top_categories.png", dpi=150); plt.close()
+plt.savefig(f"{RESULTS}/eda_top_categories.png", dpi=150); plt.show(); plt.close()
 
-master.write.mode("overwrite").parquet(f"{RESULTS}/master.parquet")
+master.toPandas().to_parquet(f"{RESULTS}/master.parquet", index=False, coerce_timestamps="us", allow_truncated_timestamps=True)
 print("  STEP 1 done ✓\n")
 
 # ─────────────────────────────────────────────
@@ -152,7 +159,7 @@ rfm = (rfm
        .withColumn("M_score", F.ntile(5).over(w_mon))
        .withColumn("RFM_Score", F.col("R_score") + F.col("F_score") + F.col("M_score")))
 
-rfm.write.mode("overwrite").parquet(f"{RESULTS}/rfm.parquet")
+rfm.toPandas().to_parquet(f"{RESULTS}/rfm.parquet", index=False)
 rfm.toPandas().to_csv(f"{RESULTS}/rfm.csv", index=False)
 print(f"  RFM records : {rfm.count():,}")
 print("  STEP 2 done ✓\n")
@@ -183,10 +190,11 @@ for k in range(2, 7):
 
 ks, costs = zip(*wssse)
 fig, ax = plt.subplots(figsize=(6, 4))
-ax.plot(ks, costs, marker="o", color="coral", linewidth=1.5)
+ax.plot(ks, costs, marker="o", color="coral", linewidth=1.5, label="WSSSE")
 ax.set_title("Elbow Method — Optimal K"); ax.set_xlabel("K"); ax.set_ylabel("WSSSE")
+ax.legend()
 plt.tight_layout()
-plt.savefig(f"{RESULTS}/kmeans_elbow.png", dpi=150); plt.close()
+plt.savefig(f"{RESULTS}/kmeans_elbow.png", dpi=150); plt.show(); plt.close()
 
 # Final model k=4
 km_model  = KMeans(k=4, seed=42, featuresCol="features", predictionCol="segment").fit(scaled)
@@ -221,7 +229,8 @@ print(seg_profile[["segment", "Segment_Label", "Avg_Recency", "Avg_Frequency", "
 (segmented
  .select("customer_unique_id", "Recency", "Frequency", "Monetary",
          "R_score", "F_score", "M_score", "RFM_Score", "segment")
- .write.mode("overwrite").parquet(f"{RESULTS}/segmented.parquet"))
+ .toPandas()
+ .to_parquet(f"{RESULTS}/segmented.parquet", index=False))
 (segmented
  .select("customer_unique_id", "Recency", "Frequency", "Monetary", "RFM_Score", "segment")
  .toPandas()
@@ -371,7 +380,7 @@ ax.set_xticks(x); ax.set_xticklabels(benchmark["Task"])
 ax.set_ylabel("Time (seconds)")
 ax.set_title("Execution Time: Pandas vs PySpark (local mode, 100K records)")
 ax.legend(); plt.tight_layout()
-plt.savefig(f"{RESULTS}/benchmark.png", dpi=150); plt.close()
+plt.savefig(f"{RESULTS}/benchmark.png", dpi=150); plt.show(); plt.close()
 print("  STEP 5 done ✓\n")
 
 # ─────────────────────────────────────────────
@@ -396,24 +405,34 @@ try:
 
     explainer   = shap.TreeExplainer(sk_rf)
     shap_values = explainer.shap_values(X)
+    # Normalize across SHAP API versions for binary classification (class 1):
+    #   list  → old API: [class0_arr, class1_arr]
+    #   3-D   → new API: (n_samples, n_features, n_classes)
+    #   2-D   → some mid versions: (n_samples, n_features) already for positive class
+    if isinstance(shap_values, list):
+        sv = shap_values[1]
+    elif hasattr(shap_values, "ndim") and shap_values.ndim == 3:
+        sv = shap_values[:, :, 1]
+    else:
+        sv = shap_values
 
     # Bar importance
     plt.figure(figsize=(7, 4))
-    shap.summary_plot(shap_values[1], X, plot_type="bar", show=False)
+    shap.summary_plot(sv, X, plot_type="bar", show=False)
     plt.title("SHAP Feature Importance (Churn Prediction)")
     plt.tight_layout()
-    plt.savefig(f"{RESULTS}/shap_bar.png", dpi=150, bbox_inches="tight"); plt.close()
+    plt.savefig(f"{RESULTS}/shap_bar.png", dpi=150, bbox_inches="tight"); plt.show(); plt.close()
 
     # Beeswarm
     plt.figure(figsize=(8, 5))
-    shap.summary_plot(shap_values[1], X, show=False)
+    shap.summary_plot(sv, X, show=False)
     plt.tight_layout()
-    plt.savefig(f"{RESULTS}/shap_beeswarm.png", dpi=150, bbox_inches="tight"); plt.close()
+    plt.savefig(f"{RESULTS}/shap_beeswarm.png", dpi=150, bbox_inches="tight"); plt.show(); plt.close()
 
     # Save mean |SHAP| values
     shap_importance = pd.DataFrame({
         "Feature":          feature_cols,
-        "Mean |SHAP|":      np.abs(shap_values[1]).mean(axis=0)
+        "Mean |SHAP|":      np.abs(sv).mean(axis=0)
     }).sort_values("Mean |SHAP|", ascending=False)
     shap_importance.to_csv(f"{RESULTS}/shap_importance.csv", index=False)
     print(shap_importance.to_string(index=False))

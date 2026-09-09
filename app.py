@@ -5,7 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-BASE    = r"C:\Users\ThanhT\OneDrive - Keyloop\Desktop\Thạc sĩ\Nghiên cứu dữ liệu lớn và Ứng dụng trong kinh doanh\Quá trình & Final"
+BASE    = os.path.dirname(os.path.abspath(__file__))
 RESULTS = os.path.join(BASE, "Results")
 
 st.set_page_config(page_title="Olist E-Commerce Analytics", layout="wide")
