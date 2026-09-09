@@ -1,0 +1,29 @@
+# Dataset (tải từ Kaggle, không commit lên repo)
+Data/
+
+# Kết quả pipeline (tự generate khi chạy pipeline.py)
+Results/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Parquet & binary
+*.parquet
+
+# PyCharm
+.idea/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Môi trường ảo
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
