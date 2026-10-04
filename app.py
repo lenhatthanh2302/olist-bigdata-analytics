@@ -212,7 +212,6 @@ with tab3:
                 "Mô hình chỉ dùng thông tin có tại đơn hàng đầu tiên (không dùng Recency/Frequency).")
 
     metrics    = load("churn_metrics.csv")
-    ablation   = load("churn_leakage_ablation.csv")
     churn_pred = load("churn_predictions.csv")
 
     if metrics is None:
@@ -244,7 +243,7 @@ with tab3:
     with c1:
         if roc_df is not None:
             auc_map = metrics.set_index("Model")["AUC-ROC"].to_dict()
-            st.plotly_chart(roc_figure(roc_df, "ROC — dự đoán churn (đặc trưng sạch)", auc=auc_map),
+            st.plotly_chart(roc_figure(roc_df, "ROC — dự đoán churn (đặc trưng đơn hàng đầu tiên)", auc=auc_map),
                             use_container_width=True)
         else:
             show_image_fallback("churn_roc.png", "ROC curve của 3 mô hình")
@@ -266,19 +265,12 @@ with tab3:
 
     st.divider()
 
-    st.subheader("Thí nghiệm rò rỉ dữ liệu (Data Leakage)")
-    if ablation is not None:
-        fig_ab = px.bar(ablation, x="AUC-ROC", y="Feature set", orientation="h",
-                        text_auto=".3f", range_x=[0, 1.05],
-                        color="AUC-ROC", color_continuous_scale="RdYlGn_r")
-        fig_ab.update_layout(coloraxis_showscale=False, height=320, yaxis_title="")
-        st.plotly_chart(fig_ab, use_container_width=True)
-        st.warning("Chỉ cần biết **ngày mua đầu tiên** đã cho AUC ~0.97 (khách mua trong 180 ngày cuối chưa đủ thời gian "
-                   "để quay lại nên không thể bị gán churn). Vì vậy AUC 0.64–0.75 ở trên **còn bị thổi phồng một phần**; "
-                   "mô hình bên dưới loại thiên lệch này.")
+    st.warning("Nhãn churn phụ thuộc vào ngày cắt dữ liệu: khách mua trong 180 ngày cuối chưa đủ thời gian để quay lại "
+               "nên không thể bị gán churn. Vì vậy AUC 0.64–0.75 ở trên **còn bị thổi phồng một phần**; "
+               "mô hình bên dưới loại thiên lệch này.")
 
     st.divider()
-    st.subheader("Mô hình sửa thiên lệch: dự đoán khách mua lại trong 180 ngày (nhóm khách đủ tuổi)")
+    st.subheader("Mô hình mua lại trong 180 ngày (nhóm khách đủ tuổi)")
     rep_m  = load("repeat_metrics.csv")
     rep_d  = load("repeat_deciles.csv")
     if rep_m is not None:

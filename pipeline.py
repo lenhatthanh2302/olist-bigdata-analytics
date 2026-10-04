@@ -354,17 +354,14 @@ print("\n[✓] BƯỚC 3 hoàn tất\n")
 
 #%%
 # =====================================================================
-# 4. DỰ ĐOÁN CHURN — LR vs RF vs GBT, KÈM KIỂM TRA RÒ RỈ DỮ LIỆU
+# 4. DỰ ĐOÁN CHURN — LR vs RF vs GBT
 # =====================================================================
 # Mục tiêu: dự đoán khách mua 1 lần có quay lại hay không.
 #
 # Định nghĩa churn: Frequency == 1 VÀ Recency > 180 ngày.
-# Vì nhãn được tạo từ Recency và Frequency nên BẤT KỲ đặc trưng nào dẫn xuất
-# từ hai biến này (kể cả gián tiếp qua K-Means hay R/F score) đều làm mô hình
-# "đọc lại đáp án". Bước này làm 2 việc:
-#   (a) chứng minh rò rỉ bằng thí nghiệm đối chứng (leakage ablation),
-#   (b) xây mô hình sạch chỉ dùng thông tin từ ĐƠN HÀNG ĐẦU TIÊN
-#       (giá trị, phí ship, đánh giá, giao trễ, trả góp, vùng miền).
+# Vì nhãn được tạo từ Recency và Frequency nên mô hình chỉ dùng thông tin từ
+# ĐƠN HÀNG ĐẦU TIÊN (giá trị, phí ship, đánh giá, giao trễ, trả góp, vùng miền);
+# Recency, Frequency, phân khúc và ngày mua bị loại khỏi đặc trưng.
 # =====================================================================
 print("=" * 70)
 print("BƯỚC 4 — DỰ ĐOÁN CHURN")
@@ -381,13 +378,13 @@ churn_df = segmented.withColumn(
 n_cust     = churn_df.count()
 n_churn    = churn_df.filter(F.col("churn") == 1).count()
 churn_rate = n_churn / n_cust
-print(f"\n[1/5] Churn rate: {churn_rate:.1%}  ({n_churn:,} / {n_cust:,} khách)")
+print(f"\n[1/4] Churn rate: {churn_rate:.1%}  ({n_churn:,} / {n_cust:,} khách)")
 pd.DataFrame({"Metric": ["Total Customers", "Churned", "Churn Rate"],
               "Value":  [n_cust, n_churn, round(churn_rate, 4)]}
              ).to_csv(f"{RESULTS}/churn_summary.csv", index=False)
 
 # ── 4.2 Đặc trưng từ đơn hàng đầu tiên của mỗi khách ────────────────
-print("\n[2/5] Đang tạo đặc trưng từ đơn hàng đầu tiên ...")
+print("\n[2/4] Đang tạo đặc trưng từ đơn hàng đầu tiên ...")
 REGION_MAP = {
     "North":      ["AC", "AP", "AM", "PA", "RO", "RR", "TO"],
     "Northeast":  ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE"],
@@ -401,7 +398,7 @@ for _name, _states in REGION_MAP.items():
 
 w_first = Window.partitionBy("customer_unique_id").orderBy("order_purchase_timestamp")
 
-# Hai cột phục vụ kiểm tra thiên lệch thời gian (xem mục 4.6):
+# Hai cột phục vụ kiểm tra thiên lệch thời gian:
 #   first_day      — đơn đầu tiên cách ngày đầu dataset bao nhiêu ngày
 #   days_to_second — sau bao nhiêu ngày khách mua đơn thứ hai (null nếu chưa mua lại)
 min_date   = master.agg(F.min("order_purchase_timestamp")).collect()[0][0].strftime("%Y-%m-%d")
@@ -435,7 +432,7 @@ churn_df = churn_df.join(first_order, "customer_unique_id", "inner")
 NUM_FEATURES = ["log_order_value", "item_count", "freight_ratio", "avg_review_score",
                 "has_review", "delivery_days", "delay_days", "max_installments", "used_voucher"]
 
-# Chia train/test 1 lần duy nhất rồi dùng chung cho mọi thí nghiệm để so sánh công bằng
+# Chia train/test 1 lần duy nhất rồi dùng chung cho cả ba mô hình để so sánh công bằng
 train_raw, test_raw = churn_df.randomSplit([0.8, 0.2], seed=SEED)
 train_raw.cache(); test_raw.cache()
 print(f"      Train: {train_raw.count():,} | Test: {test_raw.count():,}")
@@ -451,26 +448,8 @@ def confusion(pred_df):
         cm[int(r["churn"]), int(r["prediction"])] = r["count"]
     return cm
 
-# ── 4.3 Thí nghiệm đối chứng: rò rỉ dữ liệu ─────────────────────────
-print("\n[3/5] Thí nghiệm rò rỉ dữ liệu (Random Forest, cùng tập train/test) ...")
-leak_sets = {
-    "1. Recency + Frequency (rò rỉ trực tiếp)":              ["Recency", "Frequency"],
-    "2. Monetary + M_score + segment (rò rỉ gián tiếp)":     ["Monetary", "M_score", "segment"],
-    # Chỉ một con số: ngày mua đầu tiên. Nhãn churn đòi hỏi Recency > 180 nên ai mua trong
-    # 180 ngày cuối dataset đều bị gán churn = 0 bất kể hành vi => nhãn phụ thuộc mạnh vào thời điểm
-    "3. Chỉ ngày mua đầu tiên (hiệu ứng ngày cắt dữ liệu)":  ["first_day"],
-}
-leak_rows = []
-for name, cols in leak_sets.items():
-    va = VectorAssembler(inputCols=cols, outputCol="features")
-    rf_l = RandomForestClassifier(featuresCol="features", labelCol="churn", numTrees=100, seed=SEED)
-    pred = rf_l.fit(va.transform(train_raw)).transform(va.transform(test_raw))
-    leak_rows.append({"Feature set": name, "AUC-ROC": round(ev_auc.evaluate(pred), 4),
-                      "Accuracy": round(ev_acc.evaluate(pred), 4)})
-    print(f"      {name:<52} AUC = {leak_rows[-1]['AUC-ROC']:.4f}")
-
-# ── 4.4 Mô hình sạch: đặc trưng đơn hàng đầu tiên ───────────────────
-print("\n[4/5] Huấn luyện 3 mô hình trên đặc trưng sạch ...")
+# ── 4.3 Mô hình churn: đặc trưng đơn hàng đầu tiên ───────────────────
+print("\n[3/4] Huấn luyện 3 mô hình trên đặc trưng đơn hàng đầu tiên ...")
 
 # Imputer điền median cho giá trị thiếu (đơn chưa có review, thiếu ngày giao ...).
 # Vùng miền là biến phân loại nên phải qua StringIndexer + OneHotEncoder;
@@ -523,17 +502,10 @@ print(f"      Baseline (luôn đoán lớp đa số): Accuracy = {baseline_acc:.
 
 metrics = pd.DataFrame(metric_rows)
 metrics.to_csv(f"{RESULTS}/churn_metrics.csv", index=False)
-leak_df = pd.DataFrame(leak_rows)
-leak_df.loc[len(leak_df)] = {"Feature set": "4. Đặc trưng đơn hàng đầu tiên (không có ngày mua) — Random Forest",
-                             "AUC-ROC": metrics.loc[metrics["Model"] == "Random Forest", "AUC-ROC"].iloc[0],
-                             "Accuracy": metrics.loc[metrics["Model"] == "Random Forest", "Accuracy"].iloc[0]}
-leak_df.loc[len(leak_df)] = {"Feature set": "Baseline — luôn đoán lớp đa số", "AUC-ROC": 0.5,
-                             "Accuracy": round(baseline_acc, 4)}
-leak_df.to_csv(f"{RESULTS}/churn_leakage_ablation.csv", index=False)
 print("\n" + metrics.to_string(index=False))
 
-# ── 4.5 ROC + Confusion matrix ──────────────────────────────────────
-print("\n[5/5] Đang vẽ ROC và Confusion matrix ...")
+# ── 4.4 ROC + Confusion matrix ──────────────────────────────────────
+print("\n[4/4] Đang vẽ ROC và Confusion matrix ...")
 from sklearn.metrics import roc_curve
 
 def proba_pdf(pred):
@@ -896,7 +868,7 @@ try:
     df[["avg_review_score", "delivery_days", "delay_days", "freight_ratio", "max_installments"]] = (
         df[["avg_review_score", "delivery_days", "delay_days", "freight_ratio", "max_installments"]]
         .fillna(df[["avg_review_score", "delivery_days", "delay_days", "freight_ratio", "max_installments"]].median()))
-    # Giải thích mô hình "mua lại trong 180 ngày" trên khách đủ tuổi (xem mục 4.6),
+    # Giải thích mô hình "mua lại trong 180 ngày" trên khách đủ tuổi,
     # vì mô hình trên nhãn churn gốc bị lẫn hiệu ứng ngày cắt dữ liệu
     df = df[df["first_day"] <= max_first_day - CHURN_DAYS].copy()
     df["repeat_180"] = (df["days_to_second"] <= CHURN_DAYS).astype(int)
@@ -967,10 +939,9 @@ except ImportError:
 #   RQ3 — Khả năng mua lại khác nhau thế nào giữa các danh mục của đơn đầu tiên?
 #   RQ4 — Trải nghiệm giao hàng (thời gian, giao trễ, điểm đánh giá) liên quan
 #         thế nào đến việc khách có quay lại không?
-# Lưu ý quan trọng: nhãn churn gốc phụ thuộc mạnh vào ngày mua đầu tiên (xem mục 4.3/4.6),
+# Lưu ý quan trọng: nhãn churn gốc phụ thuộc mạnh vào ngày mua đầu tiên,
 # nên RQ2–RQ4 đo bằng "mua đơn thứ hai trong 180 ngày" trên khách đủ tuổi. Nhãn churn
 # thô vẫn được giữ trong bảng để đối chiếu và cho thấy mức độ sai lệch nếu dùng nó.
-# (RQ5 về PySpark vs Pandas ở Bước 5, RQ6 về rò rỉ dữ liệu ở Bước 4.)
 # Cuối bước có bảng kiểm tra nhất quán: cộng các cấp lại phải ra đúng tổng.
 # =====================================================================
 from scipy.stats import chi2_contingency
@@ -1082,7 +1053,7 @@ main_cat = (items_7
 
 # Khách có đơn đầu trong 180 ngày cuối dữ liệu chưa đủ thời gian để "quay lại",
 # nên nhãn churn của họ bị thiên lệch xuống. Cột `mature` đánh dấu nhóm đủ tuổi,
-# dùng đúng quy tắc theo ngày như mục 4.6 để hai bước cho cùng một quy mô mẫu.
+# dùng đúng quy tắc theo ngày như phần mô hình mua lại để hai bước cho cùng một quy mô mẫu.
 
 cust = (cf.select("customer_unique_id", "Frequency", "Monetary", "churn", "delivery_days",
                   "delay_days", "avg_review_score", "freight_ratio", "days_to_second", "first_day")

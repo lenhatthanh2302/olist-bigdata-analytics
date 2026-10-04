@@ -2,7 +2,7 @@
 
 Phân tích dữ liệu lớn trên Brazil E-Commerce Public Dataset (Olist) bằng PySpark. Pipeline gồm 8 bước: EDA → RFM → K-Means → Churn → Benchmark → SHAP → Câu hỏi nghiên cứu (RQ1–4) → Bảng hành động, kèm Streamlit dashboard 6 tab với biểu đồ Plotly tương tác.
 
-Bài cuối kỳ môn *Nghiên cứu dữ liệu lớn và Ứng dụng trong kinh doanh* (253MIE400801), phát triển từ bài quá trình.
+Bài nghiên cứu môn *Nghiên cứu dữ liệu lớn và Ứng dụng trong kinh doanh* (253MIE400801).
 
 ## Kết quả chính
 
@@ -13,13 +13,13 @@ Bài cuối kỳ môn *Nghiên cứu dữ liệu lớn và Ứng dụng trong ki
 | Doanh thu | R$ 15,422,461.77 |
 | Giá trị đơn trung bình | R$ 159.86 |
 | Tỷ lệ churn (mua 1 lần, không quay lại sau 180 ngày) | 57.6% |
-| AUC churn (đặc trưng sạch) — LR / RF / GBT | 0.638 / 0.701 / 0.746 |
+| AUC churn (đặc trưng đơn hàng đầu tiên) — LR / RF / GBT | 0.638 / 0.701 / 0.746 |
 | AUC mua lại 180 ngày (nhóm khách đủ tuổi, 56,035 khách) | 0.54–0.56 |
 | Tỷ lệ mua lại nền (nhóm đủ tuổi) | 3.1% |
 | Top 10% khách tạo ra | 38.2% doanh thu |
 | PySpark vs Pandas (Join + RFM, ×10 ≈ 1 triệu đơn) | 1.85× nhanh hơn; ở ×1–×2 Pandas nhanh hơn |
 
-**Về rò rỉ dữ liệu.** Đưa Recency/Frequency vào mô hình churn cho AUC gần 0.99, vì churn được định nghĩa từ chính hai biến này. Ngay cả khi bỏ chúng, ngày mua đầu tiên một mình đã cho AUC 0.968 do hiệu ứng ngày cắt dữ liệu (khách mua trong 180 ngày cuối chưa đủ thời gian để quay lại). Vì vậy pipeline có thêm mô hình trên **nhóm khách đủ tuổi** để loại thiên lệch này. Kết quả trung thực là thông tin đơn hàng đầu tiên chỉ dự báo yếu việc khách quay lại; mô hình phù hợp để xếp hạng ưu tiên, không phải dự báo từng cá nhân.
+**Về nhãn churn.** Churn được định nghĩa bằng quy ước (mua một lần, quá 180 ngày kể từ đơn cuối) nên nhãn phụ thuộc vào ngày cắt dữ liệu: khách mua trong 180 ngày cuối chưa đủ thời gian để quay lại. Vì vậy pipeline có thêm mô hình trên **nhóm khách đủ tuổi** để loại thiên lệch này. Kết quả là thông tin đơn hàng đầu tiên chỉ dự báo yếu việc khách quay lại; mô hình phù hợp để xếp hạng ưu tiên, không phải dự báo từng cá nhân.
 
 ## Pipeline
 
@@ -28,7 +28,7 @@ Bài cuối kỳ môn *Nghiên cứu dữ liệu lớn và Ứng dụng trong ki
 | 1. Load & EDA | Load 9 CSV, join master DataFrame, tổng quan đơn hàng / doanh thu / danh mục |
 | 2. RFM | Recency / Frequency / Monetary bằng PySpark |
 | 3. Phân khúc | K-Means (k=4, chọn bằng Elbow + Silhouette) trên RFM, PySpark MLlib |
-| 4. Churn | LR, Random Forest, GBT; thí nghiệm rò rỉ dữ liệu; mô hình mua lại trên nhóm đủ tuổi (class weight, Lift, Cumulative Gains) |
+| 4. Churn | LR, Random Forest, GBT; mô hình mua lại trên nhóm đủ tuổi (class weight, Lift, Cumulative Gains) |
 | 5. Benchmark | PySpark vs Pandas ở quy mô ×1/×2/×5/×10 (median 3 lần chạy, `local[*]`) |
 | 6. SHAP | Giải thích mô hình mua lại (Random Forest scikit-learn) |
 | 7. RQ1–4 | Doanh thu theo phân khúc / Pareto; mua lại theo bang, danh mục, trải nghiệm giao hàng; chi-square + Cramér's V; 15 phép kiểm tra nhất quán |
@@ -49,7 +49,7 @@ K=4 là lựa chọn kinh doanh có chủ đích (Silhouette cao nhất ở k=2 
 
 1. **EDA Overview** — KPI, xu hướng đơn theo tháng, top danh mục
 2. **Customer Segmentation** — phân bố phân khúc, chọn K, 3D RFM scatter
-3. **Churn Prediction** — so sánh mô hình, ROC, confusion matrix, thí nghiệm rò rỉ, mô hình mua lại
+3. **Churn Prediction** — so sánh mô hình, ROC, confusion matrix, mô hình mua lại
 4. **Benchmark & XAI** — PySpark vs Pandas theo quy mô, SHAP
 5. **Phân tích chuyên sâu (RQ)** — RQ1–4 với khoảng tin cậy 95% và kiểm tra nhất quán
 6. **Quyết định & Hạn chế** — bảng hành động, máy tính hòa vốn tự đặt giả định, thảo luận
