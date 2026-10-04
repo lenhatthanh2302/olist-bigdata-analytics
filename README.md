@@ -1,72 +1,100 @@
 # Olist E-Commerce Big Data Analytics
 
-Phân tích dữ liệu lớn trên Brazil E-Commerce Public Dataset (Olist) sử dụng PySpark, với pipeline 6 bước: EDA → RFM → Customer Segmentation → Churn Prediction → Benchmark → SHAP Explainability, kèm Streamlit Dashboard 4 tabs.
+Phân tích dữ liệu lớn trên Brazil E-Commerce Public Dataset (Olist) bằng PySpark. Pipeline gồm 8 bước: EDA → RFM → K-Means → Churn → Benchmark → SHAP → Câu hỏi nghiên cứu (RQ1–4) → Bảng hành động, kèm Streamlit dashboard 6 tab với biểu đồ Plotly tương tác.
 
-## Key Findings
+Bài cuối kỳ môn *Nghiên cứu dữ liệu lớn và Ứng dụng trong kinh doanh* (253MIE400801), phát triển từ bài quá trình.
 
-| Metric | Value |
+## Kết quả chính
+
+| Chỉ số | Giá trị |
 |---|---|
-| Total Delivered Orders | 96,477 |
-| Unique Customers | 93,357 |
-| Total Revenue | R$ 15,422,461.77 |
-| Avg Order Value | R$ 159.86 |
-| Churn Rate | 57.6% |
-| LR Churn AUC-ROC | 1.0000 |
-| RF Churn AUC-ROC | 0.9997 |
-| Top Churn Feature (SHAP) | Recency (0.468) |
-| PySpark RFM Speedup vs Pandas | 3.09× faster |
+| Đơn hàng đã giao | 96,477 |
+| Khách hàng duy nhất | 93,357 |
+| Doanh thu | R$ 15,422,461.77 |
+| Giá trị đơn trung bình | R$ 159.86 |
+| Tỷ lệ churn (mua 1 lần, không quay lại sau 180 ngày) | 57.6% |
+| AUC churn (đặc trưng sạch) — LR / RF / GBT | 0.638 / 0.701 / 0.746 |
+| AUC mua lại 180 ngày (nhóm khách đủ tuổi, 56,035 khách) | 0.54–0.56 |
+| Tỷ lệ mua lại nền (nhóm đủ tuổi) | 3.1% |
+| Top 10% khách tạo ra | 38.2% doanh thu |
+| PySpark vs Pandas (Join + RFM, ×10 ≈ 1 triệu đơn) | 1.85× nhanh hơn; ở ×1–×2 Pandas nhanh hơn |
+
+**Về rò rỉ dữ liệu.** Đưa Recency/Frequency vào mô hình churn cho AUC gần 0.99, vì churn được định nghĩa từ chính hai biến này. Ngay cả khi bỏ chúng, ngày mua đầu tiên một mình đã cho AUC 0.968 do hiệu ứng ngày cắt dữ liệu (khách mua trong 180 ngày cuối chưa đủ thời gian để quay lại). Vì vậy pipeline có thêm mô hình trên **nhóm khách đủ tuổi** để loại thiên lệch này. Kết quả trung thực là thông tin đơn hàng đầu tiên chỉ dự báo yếu việc khách quay lại; mô hình phù hợp để xếp hạng ưu tiên, không phải dự báo từng cá nhân.
 
 ## Pipeline
 
 | Bước | Nội dung |
 |---|---|
-| 1. Load & EDA | Load 9 CSV, join master DataFrame, tổng quan đơn hàng/doanh thu/danh mục/khu vực |
-| 2. RFM | Tính Recency / Frequency / Monetary bằng PySpark Window Functions |
-| 3. Customer Segmentation | K-Means (k=4) clustering trên RFM (PySpark MLlib) |
-| 4. Churn Prediction | Logistic Regression + Random Forest (PySpark MLlib) |
-| 5. Tool Benchmark | So sánh PySpark vs Pandas (thời gian xử lý) |
-| 6. SHAP XAI | Explain top features của churn prediction (scikit-learn + SHAP) |
+| 1. Load & EDA | Load 9 CSV, join master DataFrame, tổng quan đơn hàng / doanh thu / danh mục |
+| 2. RFM | Recency / Frequency / Monetary bằng PySpark |
+| 3. Phân khúc | K-Means (k=4, chọn bằng Elbow + Silhouette) trên RFM, PySpark MLlib |
+| 4. Churn | LR, Random Forest, GBT; thí nghiệm rò rỉ dữ liệu; mô hình mua lại trên nhóm đủ tuổi (class weight, Lift, Cumulative Gains) |
+| 5. Benchmark | PySpark vs Pandas ở quy mô ×1/×2/×5/×10 (median 3 lần chạy, `local[*]`) |
+| 6. SHAP | Giải thích mô hình mua lại (Random Forest scikit-learn) |
+| 7. RQ1–4 | Doanh thu theo phân khúc / Pareto; mua lại theo bang, danh mục, trải nghiệm giao hàng; chi-square + Cramér's V; 15 phép kiểm tra nhất quán |
+| 8. Quyết định | Bảng hành động theo phân khúc, kịch bản tác động và điểm hòa vốn, bằng chứng trả góp |
 
-## Customer Segments
+## Phân khúc khách hàng
 
-| Segment | Label | Count | Avg Recency | Avg Monetary |
-|---|---|---|---|---|
-| 0 | Lost Customers | 23,007 | 450 days | R$ 175 |
-| 1 | Loyal Customers | 32,301 | 86 days | R$ 206 |
-| 2 | At-Risk Customers | 35,244 | 241 days | R$ 109 |
-| 3 | At-Risk Customers (repeat) | 2,805 | 221 days | R$ 320 |
+| Phân khúc | Số khách | Recency TB | Chi tiêu TB |
+|---|---|---|---|
+| Recent Buyers | 32,301 (34.6%) | 86 ngày | R$ 206 |
+| At-Risk Buyers | 35,244 (37.8%) | 241 ngày | R$ 109 |
+| Lost Customers | 23,007 (24.6%) | 450 ngày | R$ 175 |
+| Repeat Buyers | 2,805 (3.0%) | 221 ngày | R$ 320 |
+
+K=4 là lựa chọn kinh doanh có chủ đích (Silhouette cao nhất ở k=2 nhưng chỉ tách ~3% khách mua lại khỏi phần còn lại).
+
+## Dashboard (6 tab)
+
+1. **EDA Overview** — KPI, xu hướng đơn theo tháng, top danh mục
+2. **Customer Segmentation** — phân bố phân khúc, chọn K, 3D RFM scatter
+3. **Churn Prediction** — so sánh mô hình, ROC, confusion matrix, thí nghiệm rò rỉ, mô hình mua lại
+4. **Benchmark & XAI** — PySpark vs Pandas theo quy mô, SHAP
+5. **Phân tích chuyên sâu (RQ)** — RQ1–4 với khoảng tin cậy 95% và kiểm tra nhất quán
+6. **Quyết định & Hạn chế** — bảng hành động, máy tính hòa vốn tự đặt giả định, thảo luận
+
+Dữ liệu Olist là dữ liệu quan sát nên các con số tác động là kịch bản giả định, không phải quan hệ nhân quả.
 
 ## Cài đặt
+
+Dashboard (Streamlit Cloud chỉ cần file này, đọc kết quả có sẵn trong `Results/`):
 
 ```bash
 pip install -r requirements.txt
 ```
 
+Chạy lại pipeline (cần Java 8/11/17 cho PySpark):
+
+```bash
+pip install -r requirements_pipeline.txt
+```
+
 ## Dataset
 
-Dataset đã được đưa vào repo. Nếu cần tải lại, lấy từ Kaggle:
-
-> https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce
-
+Dataset đã có sẵn trong repo. Nếu cần tải lại: https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce
 Đặt 9 file CSV vào thư mục `Data/`.
 
 ## Chạy
 
 ```bash
-# Bước 1: Chạy pipeline PySpark (tạo thư mục Results/)
+# Bước 1: pipeline PySpark (tạo lại Results/, mất khoảng 10–15 phút)
+# Đặt OLIST_HEADLESS=1 nếu chạy không có màn hình để không mở cửa sổ biểu đồ
 python pipeline.py
 
-# Bước 2: Khởi động Streamlit dashboard
+# Bước 2: dashboard
 streamlit run app.py
 ```
+
+Các file `Results/*.parquet` (~26 MB) không được commit; pipeline tự tạo lại khi chạy.
 
 ## Cấu trúc project
 
 ```
-├── Data/               # 9 Olist CSV files
-├── Results/            # Kết quả pipeline (tự generate khi chạy pipeline.py)
-├── pipeline.py         # PySpark pipeline 6 bước
-├── app.py              # Streamlit dashboard 4 tabs
-├── requirements.txt
-└── test.py
+├── Data/                      # 9 Olist CSV
+├── Results/                   # CSV + PNG kết quả (dashboard đọc từ đây)
+├── pipeline.py                # PySpark pipeline 8 bước
+├── app.py                     # Streamlit dashboard 6 tab (Plotly)
+├── requirements.txt           # Cho dashboard / Streamlit Cloud
+└── requirements_pipeline.txt  # Cho pipeline (PySpark, scikit-learn, SHAP, ...)
 ```
