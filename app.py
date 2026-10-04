@@ -52,14 +52,13 @@ def roc_figure(curves, title, x="FPR", y="TPR", auc=None):
 st.sidebar.title("Olist Analytics")
 st.sidebar.markdown("""
 **Dataset**: Brazilian E-Commerce (Olist)
+
 **Pipeline**: PySpark MLlib
-**Steps**: EDA → RFM → Segmentation → Churn → Benchmark → XAI
+
+EDA → RFM → Segmentation → Churn → Benchmark → XAI → RQ → Hành động
 """)
-st.sidebar.markdown("---")
+st.sidebar.caption("Phân tích chi tiết và phương pháp nằm trong báo cáo; dashboard chỉ trực quan hóa kết quả.")
 eda = load("eda_summary.csv")
-if eda is not None:
-    for _, row in eda.iterrows():
-        st.sidebar.metric(row["Metric"], row["Value"])
 
 # ── tabs ──────────────────────────────────────
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
@@ -176,10 +175,8 @@ with tab2:
             st.plotly_chart(fig_k, use_container_width=True)
             st.dataframe(ksel.style.format({"WSSSE": "{:,.0f}", "Silhouette": "{:.3f}"}),
                          use_container_width=True)
-            st.caption("Silhouette cao nhất ở k=2, nhưng k=2 chỉ tách ~3% khách mua lại (Frequency ≥ 2) "
-                       "khỏi ~97% còn lại, quá thô để làm CRM. K=4 cho Recent / At-Risk / Lost / "
-                       "Repeat Buyers có hành động khác nhau. Đây là lựa chọn kinh doanh có chủ đích, "
-                       "đánh đổi một phần chất lượng cụm về mặt toán học, không phải tối ưu thống kê.")
+            st.caption("Silhouette cao nhất ở k=2 nhưng chỉ tách ~3% khách mua lại khỏi phần còn lại; "
+                       "chọn k=4 là quyết định kinh doanh có chủ đích, không phải tối ưu thống kê.")
 
     st.divider()
 
@@ -211,14 +208,8 @@ with tab2:
 # ═══════════════════════════════════════════════
 with tab3:
     st.header("Churn Prediction — LR, Random Forest, GBT (PySpark MLlib)")
-    st.markdown("""
-    **Định nghĩa churn**: khách `Frequency = 1` VÀ `Recency > 180 ngày` — mua đúng một lần
-    và không quay lại trong 6 tháng.
-
-    Vì churn được định nghĩa từ Recency và Frequency, hai biến này (và các biến suy ra từ
-    chúng như segment) **không được dùng làm đặc trưng**. Mô hình chỉ dùng thông tin có
-    ngay tại đơn hàng đầu tiên: giá trị đơn, phí vận chuyển, giao hàng, đánh giá, trả góp, vùng.
-    """)
+    st.markdown("**Churn** = mua đúng một lần và không quay lại trong 180 ngày. "
+                "Mô hình chỉ dùng thông tin có tại đơn hàng đầu tiên (không dùng Recency/Frequency).")
 
     metrics    = load("churn_metrics.csv")
     ablation   = load("churn_leakage_ablation.csv")
@@ -235,16 +226,9 @@ with tab3:
                  use_container_width=True)
 
     best = metrics.sort_values("AUC-ROC", ascending=False).iloc[0]
-    if churn_pred is not None:
-        base = churn_pred["churn"].mean()
-        st.markdown(
-            f"**Đánh đổi Precision – Recall ({best['Model']})**: Recall {best['Recall (Churn)']:.2f} "
-            f"nghĩa là bắt được khoảng {best['Recall (Churn)']:.0%} khách thực sự churn, nhưng "
-            f"Precision chỉ {best['Precision (Churn)']:.2f}, tức khoảng "
-            f"{1 - best['Precision (Churn)']:.0%} khách bị cảnh báo là báo nhầm. Tỷ lệ churn nền "
-            f"đã là {base:.1%}, nên Precision này chỉ cao hơn mức đoán ngẫu nhiên một khoảng vừa phải. "
-            "Mô hình phù hợp để xếp hạng/ưu tiên khách cần chăm sóc hơn là để kết luận từng cá nhân."
-        )
+    st.caption(f"{best['Model']}: bắt được {best['Recall (Churn)']:.0%} khách churn nhưng "
+               f"{1 - best['Precision (Churn)']:.0%} cảnh báo là báo nhầm. Phù hợp để xếp hạng ưu tiên, "
+               "không phải kết luận từng cá nhân.")
 
     metrics_long = metrics[["Model", "AUC-ROC", "PR-AUC", "Accuracy", "F1-Score"]] \
         .melt(id_vars="Model", var_name="Metric", value_name="Score")
@@ -289,18 +273,9 @@ with tab3:
                         color="AUC-ROC", color_continuous_scale="RdYlGn_r")
         fig_ab.update_layout(coloraxis_showscale=False, height=320, yaxis_title="")
         st.plotly_chart(fig_ab, use_container_width=True)
-        st.markdown("""
-        Nếu đưa Recency/Frequency vào mô hình, AUC gần như tuyệt đối (~0.99), nhưng đó chỉ là
-        mô hình "đọc lại" định nghĩa churn. Segment và M_score cũng rò rỉ gián tiếp (~0.96) vì
-        K-Means gom nhóm theo Recency.
-
-        Điểm đáng chú ý nhất là dòng thứ ba: **chỉ cần biết ngày mua đầu tiên** đã cho AUC ~0.97.
-        Lý do là hiệu ứng *ngày cắt dữ liệu* (right-censoring): khách mua trong 180 ngày cuối của
-        dataset chưa có đủ thời gian để "quay lại", nên theo định nghĩa họ không thể bị gán churn.
-        Vì vậy AUC 0.70–0.75 của mô hình đặc trưng sạch phía trên **vẫn còn bị thổi phồng một phần**
-        do tín hiệu thời gian lọt vào qua các đặc trưng như giá trị đơn hay phí vận chuyển (các biến
-        này thay đổi theo thời kỳ). Phần dưới đây loại hẳn thiên lệch này.
-        """)
+        st.warning("Chỉ cần biết **ngày mua đầu tiên** đã cho AUC ~0.97 (khách mua trong 180 ngày cuối chưa đủ thời gian "
+                   "để quay lại nên không thể bị gán churn). Vì vậy AUC 0.64–0.75 ở trên **còn bị thổi phồng một phần**; "
+                   "mô hình bên dưới loại thiên lệch này.")
 
     st.divider()
     st.subheader("Mô hình sửa thiên lệch: dự đoán khách mua lại trong 180 ngày (nhóm khách đủ tuổi)")
@@ -308,28 +283,21 @@ with tab3:
     rep_d  = load("repeat_deciles.csv")
     if rep_m is not None:
         base_r = rep_m["Base rate"].iloc[0]
-        st.markdown(
-            "Chỉ giữ khách có đơn đầu tiên cách ngày cuối dataset ít nhất 180 ngày (tức ai cũng có đủ "
-            f"thời gian để mua lại), rồi dự đoán họ có mua đơn thứ hai trong 180 ngày hay không. "
-            f"Tỷ lệ mua lại nền chỉ **{base_r:.1%}**, nên dùng class weight và đánh giá bằng "
-            "PR-AUC, Lift và Cumulative Gains thay vì Accuracy."
-        )
+        st.caption(f"Chỉ giữ khách có đơn đầu cách ngày cuối dataset ≥ 180 ngày; dự đoán mua đơn thứ hai trong 180 ngày. "
+                   f"Tỷ lệ nền chỉ {base_r:.1%}, nên đánh giá bằng PR-AUC, Lift, Cumulative Gains.")
         num_r = [c for c in rep_m.columns if c != "Model"]
         st.dataframe(rep_m.style.format({c: "{:.4f}" for c in num_r}), use_container_width=True)
         best_r = rep_m.sort_values("AUC-ROC", ascending=False).iloc[0]
         top_dec = rep_d.iloc[0] if rep_d is not None else None
-        msg = (f"AUC tốt nhất chỉ ~{best_r['AUC-ROC']:.2f} (mức 0.5 là đoán ngẫu nhiên): khi loại hiệu ứng "
-               "thời gian, thông tin trong đơn hàng đầu tiên dự báo được rất ít việc khách có quay lại.")
+        msg = (f"AUC tốt nhất chỉ ~{best_r['AUC-ROC']:.2f} (0.5 = đoán ngẫu nhiên): thông tin đơn hàng đầu tiên "
+               "dự báo được rất ít việc khách có quay lại.")
         if top_dec is not None:
-            n_top = int(top_dec["Customers"]); k_top = round(n_top * top_dec["Repeat_Rate"])
+            n_top = int(top_dec["Customers"])
             se_top = (top_dec["Repeat_Rate"] * (1 - top_dec["Repeat_Rate"]) / n_top) ** 0.5
             lo_l = (top_dec["Repeat_Rate"] - 1.96 * se_top) / base_r
             hi_l = (top_dec["Repeat_Rate"] + 1.96 * se_top) / base_r
-            msg += (f" Trên tập kiểm tra, nhóm 10% khách có điểm dự báo cao nhất ghi nhận tỷ lệ mua lại "
-                    f"{top_dec['Repeat_Rate']:.1%}, cao hơn {top_dec['Lift']:.2f} lần so với mức nền. Đây là mô tả "
-                    f"dữ liệu, không phải hiệu quả của một chiến dịch; nhóm này chỉ có {k_top} khách mua lại nên "
-                    f"khoảng tin cậy 95% của lift khá rộng (≈ {lo_l:.1f}–{hi_l:.1f}). Mô hình hữu ích để xếp hạng "
-                    "ưu tiên, không đủ mạnh để dự báo từng cá nhân.")
+            msg += (f" Nhóm 10% điểm cao nhất mua lại {top_dec['Repeat_Rate']:.1%}, gấp {top_dec['Lift']:.2f} lần mức nền "
+                    f"(CI 95% ≈ {lo_l:.1f}–{hi_l:.1f}); đây là mô tả dữ liệu, không phải hiệu quả chiến dịch.")
         st.info(msg)
         rep_c = load("repeat_curves.csv")
         if rep_c is not None:
@@ -357,13 +325,14 @@ with tab3:
             fig_dec.update_layout(height=340, yaxis_tickformat=".0%")
             st.plotly_chart(fig_dec, use_container_width=True)
 
-    if churn_pred is not None:
+    churn_sum = load("churn_summary.csv")
+    if churn_sum is not None:
         st.divider()
-        rate = churn_pred["churn"].mean()
+        cs = dict(zip(churn_sum["Metric"], churn_sum["Value"]))
         c1, c2, c3 = st.columns(3)
-        c1.metric("Overall Churn Rate", f"{rate:.1%}")
-        c2.metric("Churned Customers", f"{int(churn_pred['churn'].sum()):,}")
-        c3.metric("Non-Churned Customers", f"{int((churn_pred['churn'] == 0).sum()):,}")
+        c1.metric("Churn rate (toàn bộ khách)", f"{cs['Churn Rate']:.1%}")
+        c2.metric("Khách churn", f"{int(cs['Churned']):,}")
+        c3.metric("Khách không churn", f"{int(cs['Total Customers'] - cs['Churned']):,}")
 
 # ═══════════════════════════════════════════════
 # TAB 4 — Benchmark & XAI
@@ -392,25 +361,15 @@ with tab4:
 
         st.dataframe(benchmark.drop(columns="Scale_n"), use_container_width=True)
 
-        wins = benchmark[benchmark["Speedup (Pandas/PySpark)"] > 1]
-        st.info(
-            "**Đọc kết quả**: ở quy mô ~100K–500K dòng, Pandas nhanh hơn vì PySpark phải trả "
-            "chi phí khởi tạo JVM, serialization và shuffle. Khi quy mô tiến gần 1 triệu bản ghi "
-            "(×10, dữ liệu nhân bản), lợi thế xử lý phân tán bắt đầu bù đắp chi phí này ở tác vụ "
-            f"Join + RFM ({len(wins)} trường hợp PySpark nhanh hơn); bài chưa thử quy mô lớn hơn "
-            "nên chưa xác định được điểm hòa vốn chính xác. K-Means vẫn chậm hơn nhiều vì mỗi vòng "
-            "lặp là một job riêng, còn scikit-learn chạy rất hiệu quả trên một máy. "
-            "Lưu ý: chế độ local[*] chỉ dùng nhiều core của một máy, chưa phải cluster; lợi thế "
-            "thực sự của Spark xuất hiện khi dữ liệu vượt quá RAM của một máy."
-        )
+        st.info("Ở quy mô nhỏ Pandas nhanh hơn (PySpark tốn chi phí khởi tạo); PySpark bắt đầu bù lại ở Join + RFM "
+                "khi gần 1 triệu dòng. Chạy `local[*]` trên một máy, chưa phải cluster.")
     else:
         st.warning("Run pipeline.py first.")
 
     st.divider()
 
     st.subheader("🔍 Explainable AI — SHAP")
-    st.markdown("SHAP cho biết đặc trưng nào đẩy xác suất **mua lại trong 180 ngày** của từng khách lên hoặc xuống "
-                "(Random Forest scikit-learn, huấn luyện trên nhóm khách đủ tuổi để tránh thiên lệch ngày cắt dữ liệu).")
+    st.caption("Đặc trưng nào đẩy xác suất mua lại trong 180 ngày lên hoặc xuống (Random Forest, nhóm khách đủ tuổi).")
 
     shap_imp = load("shap_importance.csv")
     if shap_imp is not None:
@@ -448,13 +407,8 @@ with tab4:
         top = ranked.head(3)["Feature"].tolist()
         ops = ["delivery_days", "delay_days", "avg_review_score"]
         ops_share = ranked[ranked["Feature"].isin(ops)]["Mean |SHAP|"].sum() / ranked["Mean |SHAP|"].sum()
-        st.markdown(f"""
-**Diễn giải**: ba đặc trưng ảnh hưởng nhiều nhất là `{top[0]}`, `{top[1]}`, `{top[2]}`; nhóm
-đặc trưng giao hàng và đánh giá (`delivery_days`, `delay_days`, `avg_review_score`) chiếm khoảng
-{ops_share:.0%} tổng mức ảnh hưởng. Nghĩa là khả năng khách mua lại gắn nhiều hơn với **cách họ thanh
-toán và giá trị giỏ hàng đầu tiên** so với trải nghiệm giao hàng. Cần đọc thận trọng: AUC của mô hình chỉ
-~0.6, SHAP mô tả cách mô hình dùng đặc trưng chứ không chứng minh quan hệ nhân quả.
-""")
+        st.info(f"Top 3: `{top[0]}`, `{top[1]}`, `{top[2]}`; giao hàng và đánh giá chỉ chiếm ~{ops_share:.0%} tổng mức ảnh hưởng. "
+                "Mô hình có AUC ~0.6 nên SHAP chỉ mô tả cách mô hình dùng đặc trưng, không chứng minh quan hệ nhân quả.")
     else:
         st.warning("SHAP results not found.")
 
@@ -463,13 +417,8 @@ toán và giá trị giỏ hàng đầu tiên** so với trải nghiệm giao h�
 # ═══════════════════════════════════════════════
 with tab5:
     st.header("Phân tích chuyên sâu — từ mô tả đến ra quyết định")
-    st.markdown("""
-    Mỗi câu hỏi nghiên cứu (RQ) được soi ở nhiều cấp (phân khúc, bang, danh mục, đơn hàng) và có bảng
-    kiểm tra nhất quán ở cuối: cộng các cấp lại phải ra đúng tổng.
-
-    **Lưu ý phương pháp**: RQ2–RQ4 đo bằng *tỷ lệ mua đơn thứ hai trong 180 ngày trên nhóm khách đủ tuổi*,
-    không dùng churn thô, vì churn thô phụ thuộc mạnh vào ngày mua đầu tiên (xem tab Churn).
-    """)
+    st.caption("RQ2–RQ4 đo bằng tỷ lệ mua đơn thứ hai trong 180 ngày trên nhóm khách đủ tuổi (không dùng churn thô, "
+               "vì churn thô lệch theo ngày mua đầu tiên).")
 
     seg_val = load("segment_value.csv")
     pareto  = load("pareto_summary.csv")
@@ -500,27 +449,25 @@ with tab5:
         fig_box = go.Figure()
         for _, r in seg_val.iterrows():
             fig_box.add_trace(go.Box(
-                name=r["Segment_Label"], q1=[r["P25"]], median=[r["Median"]], q3=[r["P75"]],
+                x=[r["Segment_Label"]], name=r["Segment_Label"],
+                q1=[r["P25"]], median=[r["Median"]], q3=[r["P75"]],
                 lowerfence=[r["P25"]], upperfence=[r["P95"]], mean=[r["Mean_Monetary"]],
-                marker_color=seg_colors.get(r["Segment_Label"])))
+                marker_color=seg_colors.get(r["Segment_Label"]), boxmean=True))
         fig_box.update_layout(title="Phân phối chi tiêu theo phân khúc (R$, thang log)", height=380,
-                              yaxis_type="log", showlegend=False)
+                              yaxis_type="log", showlegend=False, yaxis_title="R$ mỗi khách")
         st.plotly_chart(fig_box, use_container_width=True)
-        st.caption("Hộp = P25–P75, vạch giữa = trung vị, râu trên = P95, chấm = trung bình. "
-                   "Trung bình luôn cao hơn trung vị: vài khách chi rất lớn kéo đuôi phải.")
-    st.dataframe(seg_val, use_container_width=True)
+        st.caption("Hộp = P25–P75, vạch = trung vị, râu trên = P95, đường đứt = trung bình.")
+    with st.expander("Bảng số liệu theo phân khúc"):
+        st.dataframe(seg_val.style.format({"Customers": "{:,}", "Revenue": "{:,.0f}", "Mean_Monetary": "{:.1f}"}),
+                     use_container_width=True)
 
     top_seg = seg_val.sort_values("Revenue_Share_%", ascending=False).iloc[0]
     rep_seg = seg_val[seg_val["Segment_Label"] == "Repeat Buyers"].iloc[0]
     if pareto is not None:
         g = dict(zip(pareto["Top_%_khách"], pareto["Doanh_thu_%"]))
-        st.markdown(
-            f"**Đọc kết quả**: `{top_seg['Segment_Label']}` chiếm {top_seg['Customer_Share_%']:.1f}% khách nhưng "
-            f"{top_seg['Revenue_Share_%']:.1f}% doanh thu. `Repeat Buyers` chỉ {rep_seg['Customer_Share_%']:.1f}% khách "
-            f"({rep_seg['Revenue_Share_%']:.1f}% doanh thu) nhưng chi trung bình R${rep_seg['Mean_Monetary']:.0f}, cao nhất. "
-            f"Doanh thu cũng tập trung: top 10% khách tạo {g.get(10, float('nan')):.1f}% doanh thu, top 20% tạo "
-            f"{g.get(20, float('nan')):.1f}%."
-        )
+        st.info(f"`{top_seg['Segment_Label']}`: {top_seg['Customer_Share_%']:.1f}% khách, {top_seg['Revenue_Share_%']:.1f}% doanh thu. "
+                f"`Repeat Buyers` chỉ {rep_seg['Customer_Share_%']:.1f}% khách nhưng chi cao nhất (R${rep_seg['Mean_Monetary']:.0f}). "
+                f"Top 10% khách tạo {g.get(10, float('nan')):.1f}% doanh thu.")
         fig_p = px.line(pareto, x="Top_%_khách", y="Doanh_thu_%", markers=True,
                         title="Mức tập trung doanh thu (Pareto)")
         fig_p.add_scatter(x=[0, 100], y=[0, 100], mode="lines", name="Phân phối đều",
@@ -568,14 +515,9 @@ with tab5:
         st.plotly_chart(fig_c, use_container_width=True)
         if len(dc) >= 2:
             hi, lo = dc.iloc[0], dc.iloc[-1]
-            st.markdown(
-                f"Cao nhất là `{hi['category']}` ({hi['Repeat180_Mature']:.1%}), thấp nhất là "
-                f"`{lo['category']}` ({lo['Repeat180_Mature']:.1%}): chênh khoảng "
-                f"{hi['Repeat180_Mature'] / lo['Repeat180_Mature']:.1f} lần. Ba danh mục cao nhất: "
-                + ", ".join(f"`{x}`" for x in dc.head(3)["category"]) + "; ba danh mục thấp nhất: "
-                + ", ".join(f"`{x}`" for x in dc.tail(3)["category"])
-                + ". Nguyên nhân (ví dụ tính chất mua một lần của một số mặt hàng) mới là giả thuyết chưa kiểm chứng."
-            )
+            st.info(f"Cao nhất `{hi['category']}` ({hi['Repeat180_Mature']:.1%}), thấp nhất `{lo['category']}` "
+                    f"({lo['Repeat180_Mature']:.1%}), chênh ~{hi['Repeat180_Mature'] / lo['Repeat180_Mature']:.1f} lần. "
+                    "Nguyên nhân mới là giả thuyết chưa kiểm chứng.")
         with st.expander("Bảng chi tiết theo danh mục"):
             st.dataframe(dc, use_container_width=True)
 
@@ -604,13 +546,9 @@ with tab5:
         st.dataframe(assoc.style.format({"Chi2": "{:.1f}", "p_value": "{:.3g}", "Cramers_V": "{:.3f}"}),
                      use_container_width=True)
         sig = assoc[assoc["p_value"] < 0.05]["Dimension"].tolist()
-        st.info(
-            "**Kết luận thận trọng**: mọi yếu tố đều có hiệu ứng yếu (Cramér's V < 0.1). "
-            f"Chỉ {', '.join(sig) if sig else 'không yếu tố nào'} có ý nghĩa thống kê; thời gian giao, giao trễ và điểm đánh giá "
-            "không khác biệt có ý nghĩa với việc mua lại trên dữ liệu Olist. Xu hướng giảm nhẹ khi giao chậm có "
-            "tồn tại nhưng nằm trong sai số lấy mẫu. Vì vậy 'cải thiện giao hàng sẽ giữ chân khách' là giả thuyết "
-            "chưa được dữ liệu ủng hộ mạnh, cần A/B test trước khi đầu tư."
-        )
+        st.info(f"Mọi yếu tố đều có hiệu ứng yếu (Cramér's V < 0.1); chỉ {', '.join(sig) if sig else 'không yếu tố nào'} "
+                "có ý nghĩa thống kê. Thời gian giao, giao trễ, điểm đánh giá không khác biệt có ý nghĩa với việc mua lại: "
+                "'giao nhanh hơn thì giữ chân khách' chưa được dữ liệu ủng hộ, cần A/B test.")
 
     st.divider()
     st.subheader("Kiểm tra nhất quán giữa các cấp tổng hợp")
@@ -625,11 +563,8 @@ with tab5:
 # ═══════════════════════════════════════════════
 with tab6:
     st.header("Từ phân tích đến quyết định")
-    st.markdown("""
-    Bảng dưới chuyển các phát hiện thành hành động theo từng phân khúc. Dữ liệu Olist là dữ liệu quan sát,
-    nên cột *Tác động* là **kịch bản** ("nếu uplift đạt X thì giá trị là Y"), không phải dự báo.
-    Con số đáng chú ý nhất là **điểm hòa vốn**: chi phí tối đa cho mỗi khách được nhắm để chiến dịch không lỗ.
-    """)
+    st.caption("Tác động là kịch bản (\"nếu uplift đạt X thì giá trị là Y\"), không phải dự báo. "
+               "Điểm hòa vốn = chi phí tối đa cho mỗi khách được nhắm để chiến dịch không lỗ.")
     act   = load("action_table.csv")
     scen  = load("impact_scenarios.csv")
     inst  = load("installments_repeat.csv")
@@ -651,11 +586,8 @@ with tab6:
                         color_discrete_sequence=["#9ecae1", "#4C72B0", "#08306b"])
         fig_sc.update_layout(height=400, legend=dict(orientation="h", y=-0.25))
         st.plotly_chart(fig_sc, use_container_width=True)
-    st.markdown(
-        "Ngay cả khi chiến dịch làm tăng 1 điểm % khách mua đơn thứ hai ở nhóm lớn nhất, giá trị chỉ vào khoảng "
-        "0.4% doanh thu, và ngân sách hòa vốn chỉ vài R$ mỗi khách. Vì vậy hành động nên **rẻ và tự động**, "
-        "chiết khấu sâu gần như chắc chắn làm lỗ."
-    )
+    st.info("Dù uplift +1 điểm % ở nhóm lớn nhất, giá trị chỉ ~0.4% doanh thu và hòa vốn chỉ vài R\\$ mỗi khách: "
+            "hành động nên rẻ và tự động, chiết khấu sâu gần như chắc chắn làm lỗ.")
 
     st.subheader("Máy tính hòa vốn (tự thử giả định)")
     if prof is not None:
@@ -675,12 +607,12 @@ with tab6:
         m1.metric("Doanh thu thêm", f"R${extra_rev:,.0f}")
         m2.metric("Lợi nhuận thêm", f"R${profit:,.0f}")
         m3.metric("Chi phí chiến dịch", f"R${spend:,.0f}")
+        roi = (profit - spend) / spend * 100 if spend > 0 else None
         m4.metric("Lãi/lỗ ròng", f"R${profit - spend:,.0f}",
-                  delta="có lãi" if profit - spend >= 0 else "lỗ", delta_color="normal")
+                  delta=f"{roi:+.0f}% so với chi phí" if roi is not None else None)
         be_cost = upl / 100 * aov * mar / 100
-        st.caption(f"Với giả định này, chi phí tối đa để không lỗ là R${be_cost:.2f} mỗi khách "
-                   f"(giá trị đơn trung bình R${aov:.0f}). Biên lợi nhuận không có trong dữ liệu Olist; "
-                   "đây là tham số để người dùng tự đặt.")
+        st.caption(f"Chi phí tối đa để không lỗ: R\\${be_cost:.2f} mỗi khách (giá trị đơn trung bình R\\${aov:.0f}). "
+                   "Biên lợi nhuận không có trong dữ liệu Olist, là tham số tự đặt.")
 
     if inst is not None:
         st.subheader("Bằng chứng cho giả thuyết trả góp")
@@ -688,38 +620,22 @@ with tab6:
                        title="Tỷ lệ mua lại trong 180 ngày theo số kỳ trả góp của đơn đầu (nhóm khách đủ tuổi)")
         fig_i.update_layout(height=340, yaxis_tickformat=".1%", yaxis_title="Tỷ lệ mua lại")
         st.plotly_chart(fig_i, use_container_width=True)
-        st.caption("Xu hướng tăng rõ và có ý nghĩa thống kê, nhưng hiệu ứng yếu (Cramér's V ≈ 0.02). "
-                   "Có thể là chọn lọc: khách chọn trả góp vốn đã khác nhóm còn lại. Cần A/B test.")
+        st.caption("Xu hướng tăng có ý nghĩa thống kê nhưng hiệu ứng yếu (Cramér's V ≈ 0.02); có thể là chọn lọc. Cần A/B test.")
 
     st.divider()
-    st.header("Thảo luận")
-    st.markdown("""
-    **Điều dữ liệu ủng hộ.** (1) Doanh thu tập trung: top 10% khách tạo khoảng 38% doanh thu, và nhóm
-    Recent Buyers đóng góp nhiều nhất. (2) Danh mục của đơn đầu tiên và số kỳ trả góp là hai yếu tố có liên hệ
-    thống kê với việc mua lại, dù yếu. (3) Nhóm Repeat Buyers rất nhỏ nhưng chi tiêu cao nhất, nên đáng bảo vệ.
-
-    **Điều dữ liệu chưa ủng hộ.** Bang, thời gian giao, giao trễ và điểm đánh giá không khác biệt có ý nghĩa với việc
-    quay lại. Giả thuyết phổ biến "giao nhanh hơn thì khách quay lại" vì vậy chưa được xác nhận ở đây. Khách đánh giá
-    1 sao vẫn mua lại gần như bằng khách đánh giá 5 sao, điều này gợi ý Olist là marketplace nơi khách chủ yếu mua một lần theo nhu cầu.
-
-    **Bài học phương pháp.** Hai kết quả đầu tiên trông rất đẹp (AUC 0.99 rồi 0.70–0.75) nhưng đều do rò rỉ dữ liệu:
-    trực tiếp (Recency, Frequency), gián tiếp (segment) và theo lịch (ngày mua đầu tiên, vì khách mua gần cuối dữ liệu
-    chưa kịp quay lại). Chỉ khi giới hạn vào nhóm khách đủ tuổi mới thấy mức dự báo thực: yếu (AUC ≈ 0.55–0.59).
-
-    **Mô hình dùng để làm gì.** Trên tập kiểm tra, nhóm 10% khách có điểm dự báo cao nhất ghi nhận tỷ lệ mua lại cao
-    hơn khoảng 1.8 lần so với mức nền (mô tả dữ liệu, với khoảng tin cậy rộng vì chỉ có vài chục khách mua lại trong nhóm).
-    Điều này đủ để xếp hạng ưu tiên nguồn lực, không đủ để kết luận từng cá nhân. Quan trọng hơn: điểm dự báo cho biết ai
-    *có khả năng* mua lại, chưa cho biết ai *bị tác động* bởi chiến dịch (dự báo ≠ uplift); người vốn sẵn sàng mua lại vẫn
-    sẽ mua dù không được nhắn tin. Vì vậy cần nhóm đối chứng (holdout) khi triển khai.
-    """)
-
-    st.header("Hạn chế")
-    st.markdown("""
-    1. **Quan sát, không nhân quả.** Mọi liên hệ (trả góp, danh mục, giao hàng) chỉ là tương quan; chọn lọc và biến nhiễu chưa được kiểm soát. Hành động đề xuất đều kèm A/B test.
-    2. **Nhãn mua lại hiếm (3.1%).** Mẫu 56,035 khách đủ tuổi cho ít khách dương tính, nên mô hình yếu và các so sánh nhóm nhỏ có khoảng tin cậy rộng.
-    3. **Thiếu chi phí và biên lợi nhuận.** Kịch bản chỉ tính trên doanh thu; điểm hòa vốn phải nhân thêm biên lợi nhuận thực của doanh nghiệp.
-    4. **Phạm vi dữ liệu.** Một marketplace, giai đoạn 2016–2018, không có dữ liệu quảng cáo, kênh tiếp cận hay hành vi duyệt web.
-    5. **Chọn k = 4 theo ý nghĩa kinh doanh.** Silhouette cao nhất ở k = 2, nhưng k = 2 chỉ tách khoảng 3% khách mua lại khỏi phần còn lại.
-    6. **Benchmark chạy trên một máy.** `local[*]` dùng nhiều core nhưng chưa phải cluster, dữ liệu ×10 là nhân bản; kết quả cho thấy xu hướng, không phải bằng chứng về hiệu năng cluster.
-    7. **Điểm đánh giá chỉ có ở khách chịu đánh giá**, nên phân tích theo sao có thể lệch về nhóm khách hay phản hồi.
-    """)
+    st.subheader("Kết luận chính")
+    st.markdown(
+        "- **Ủng hộ:** doanh thu tập trung (top 10% khách ~38%); danh mục đơn đầu và số kỳ trả góp có liên hệ thống kê với việc mua lại, dù yếu.\n"
+        "- **Chưa ủng hộ:** bang, thời gian giao, giao trễ, điểm đánh giá không khác biệt có ý nghĩa.\n"
+        "- **Dự báo ≠ uplift:** điểm dự báo cho biết ai có khả năng mua lại, không cho biết ai bị tác động bởi chiến dịch; cần nhóm đối chứng (holdout)."
+    )
+    with st.expander("Hạn chế"):
+        st.markdown("""
+1. **Quan sát, không nhân quả.** Mọi liên hệ chỉ là tương quan; hành động đề xuất đều kèm A/B test.
+2. **Nhãn mua lại hiếm (3.1%).** Mô hình yếu và các so sánh nhóm nhỏ có khoảng tin cậy rộng.
+3. **Thiếu chi phí và biên lợi nhuận.** Kịch bản chỉ tính trên doanh thu.
+4. **Phạm vi dữ liệu.** Một marketplace, 2016–2018, không có dữ liệu quảng cáo hay hành vi duyệt web.
+5. **Chọn k = 4 theo ý nghĩa kinh doanh**, không phải tối ưu Silhouette.
+6. **Benchmark trên một máy** (`local[*]`, dữ liệu ×10 là nhân bản), chỉ cho thấy xu hướng.
+7. **Điểm đánh giá chỉ có ở khách chịu đánh giá**, có thể lệch mẫu.
+""")
