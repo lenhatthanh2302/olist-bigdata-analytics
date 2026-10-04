@@ -1,3 +1,13 @@
-Task,Pandas (s),PySpark (s),Speedup (Pandas/PySpark)
-RFM Computation,6.341,2.054,3.09
-K-Means Clustering,2.642,8.307,0.32
+Task,Scale,Orders,Pandas (s),PySpark (s),Speedup (Pandas/PySpark)
+Join + RFM,×1,99441,0.469,0.803,0.58
+Window ntile,×1,99441,0.054,0.28,0.19
+K-Means (k=4),×1,99441,0.07,6.425,0.01
+Join + RFM,×2,198882,1.497,2.882,0.52
+Window ntile,×2,198882,0.102,0.311,0.33
+K-Means (k=4),×2,198882,0.129,6.911,0.02
+Join + RFM,×5,497205,3.753,3.768,1.0
+Window ntile,×5,497205,0.167,0.279,0.6
+K-Means (k=4),×5,497205,0.235,7.876,0.03
+Join + RFM,×10,994410,12.368,6.686,1.85
+Window ntile,×10,994410,0.449,0.434,1.03
+K-Means (k=4),×10,994410,0.556,9.965,0.06

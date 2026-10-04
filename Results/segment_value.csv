@@ -1,0 +1,5 @@
+Segment_Label,Customers,Revenue,Mean_Monetary,P25,Median,P75,P95,Customer_Share_%,Revenue_Share_%
+Recent Buyers,32301,6667012.34,206.4,70.89,127.21,218.7,650.34,34.6,43.2
+At-Risk Buyers,35244,3827106.11,108.59,55.01,87.71,142.1,256.43,37.8,24.8
+Lost Customers,23007,4029391.18,175.14,64.1,109.68,192.56,544.18,24.6,26.1
+Repeat Buyers,2805,898952.14,320.48,147.19,225.63,362.1,793.57,3.0,5.8

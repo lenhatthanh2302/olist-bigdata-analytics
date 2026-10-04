@@ -1,3 +1,4 @@
-Model,AUC-ROC,Accuracy,F1-Score
-Logistic Regression,0.5116,0.5721,0.467
-Random Forest,0.9636,0.918,0.9172
+Model,AUC-ROC,PR-AUC,Accuracy,F1-Score,Precision (Churn),Recall (Churn)
+Logistic Regression,0.6378,0.661,0.641,0.616,0.641,0.8494
+Random Forest,0.7013,0.7373,0.6545,0.6181,0.6407,0.9043
+Gradient Boosted Trees,0.7459,0.7693,0.6975,0.6843,0.6897,0.8582

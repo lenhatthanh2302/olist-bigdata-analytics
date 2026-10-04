@@ -1,0 +1,13 @@
+Phân khúc,Giả định uplift,Khách nhắm tới,Đơn thêm,Doanh thu thêm (R$),% doanh thu hiện tại,"Chi phí hòa vốn / khách (R$, trước biên LN)"
+Recent Buyers,+0.5 điểm % mua đơn 2,32301,162,33335,0.22,1.03
+Recent Buyers,+1.0 điểm % mua đơn 2,32301,323,66670,0.43,2.06
+Recent Buyers,+2.0 điểm % mua đơn 2,32301,646,133340,0.86,4.13
+At-Risk Buyers,+0.5 điểm % mua đơn 2,35244,176,19136,0.12,0.54
+At-Risk Buyers,+1.0 điểm % mua đơn 2,35244,352,38271,0.25,1.09
+At-Risk Buyers,+2.0 điểm % mua đơn 2,35244,705,76542,0.5,2.17
+Lost Customers,+0.5 điểm % mua đơn 2,23007,115,20147,0.13,0.88
+Lost Customers,+1.0 điểm % mua đơn 2,23007,230,40294,0.26,1.75
+Lost Customers,+2.0 điểm % mua đơn 2,23007,460,80588,0.52,3.5
+Repeat Buyers,+5% giá trị chi tiêu,2805,296,44948,0.29,16.02
+Repeat Buyers,+10% giá trị chi tiêu,2805,592,89895,0.58,32.05
+Repeat Buyers,+20% giá trị chi tiêu,2805,1185,179790,1.17,64.1

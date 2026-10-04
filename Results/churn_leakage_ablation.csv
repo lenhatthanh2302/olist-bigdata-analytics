@@ -1,0 +1,6 @@
+Feature set,AUC-ROC,Accuracy
+1. Recency + Frequency (rò rỉ trực tiếp),0.9884,0.9901
+2. Monetary + M_score + segment (rò rỉ gián tiếp),0.9621,0.9177
+3. Chỉ ngày mua đầu tiên (hiệu ứng ngày cắt dữ liệu),0.9683,0.9729
+4. Đặc trưng đơn hàng đầu tiên (không có ngày mua) — Random Forest,0.7013,0.6545
+Baseline — luôn đoán lớp đa số,0.5,0.5764

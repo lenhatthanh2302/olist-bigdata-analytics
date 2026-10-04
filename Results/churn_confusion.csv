@@ -1,0 +1,4 @@
+Model,TN,FP,FN,TP
+Logistic Regression,2847,5036,1594,8991
+Random Forest,2516,5367,1013,9572
+Gradient Boosted Trees,3797,4086,1501,9084

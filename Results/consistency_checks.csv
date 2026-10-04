@@ -1,0 +1,16 @@
+Chỉ số,Nguồn A,Giá trị A,Nguồn B,Giá trị B,Chênh lệch,Kết luận,Ghi chú
+Số khách,segmented,93357.0,bảng khách (cust),93357.0,0.0,Khớp,
+Số khách,segmented,93357.0,Σ theo phân khúc,93357.0,0.0,Khớp,
+Số khách,segmented,93357.0,Σ theo bang,93357.0,0.0,Khớp,
+Số khách,segmented,93357.0,Σ theo danh mục,93357.0,0.0,Khớp,
+Số khách đủ tuổi,bảng khách,56035.0,Σ theo bang,56035.0,0.0,Khớp,
+Số khách đủ tuổi,bảng khách,56035.0,Σ theo danh mục,56035.0,0.0,Khớp,
+Số đơn,master (đơn đã giao),96477.0,Σ Frequency,96477.0,0.0,Khớp,
+Doanh thu (R$),master,15422461.77,Σ Monetary,15422461.77,-0.0,Khớp,
+Doanh thu (R$),master,15422461.77,Σ theo phân khúc,15422461.77,-0.0,Khớp,
+Doanh thu (R$),master,15422461.77,Σ theo bang,15422461.77,-0.0,Khớp,
+Doanh thu (R$),master,15422461.77,Σ theo danh mục,15422461.77,-0.0,Khớp,
+Số khách churn,bảng khách,53809.0,Σ theo phân khúc,53809.0,0.0,Khớp,
+Số khách churn,bảng khách,53809.0,Σ theo bang,53809.0,0.0,Khớp,
+Số khách churn,bảng khách,53809.0,Σ theo danh mục,53809.0,0.0,Khớp,
+Doanh thu (R$),master (payment_value),15422461.77,bảng items (giá + ship),15419630.29,2831.48,Khớp,"Lệch +0.02%: payment_value gồm lãi trả góp/làm tròn, voucher"
